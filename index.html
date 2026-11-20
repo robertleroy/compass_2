@@ -5,6 +5,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#eef0ea">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="192.png">
   <title>True North</title>
   <style>
     :root {
@@ -339,6 +341,7 @@
 
       try { await navigator.wakeLock?.request("screen"); } catch (e) { }
     });
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
   </script>
 </body>
 
