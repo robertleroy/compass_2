@@ -2,6 +2,9 @@
 
 <br>
 
+Compass codeing project.  
+targets android phone. ios may have different sensor api
+
 <br>
 
 ```sh
