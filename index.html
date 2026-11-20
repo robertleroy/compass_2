@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#eef0ea">
+  <title>True North</title>
+  <style>
+    :root {
+      --paper: #eef0ea;
+      --ink: #16201b;
+      --muted: #5d6a63;
+      --needle: #c4372b;
+      --line: #b9c1b6;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --paper: #121815;
+        --ink: #e8ece6;
+        --muted: #8e9b93;
+        --needle: #ff6b5a;
+        --line: #34403a;
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+    }
+
+    body {
+      background: var(--paper);
+      color: var(--ink);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.9rem;
+      padding: 1rem;
+      text-align: center;
+    }
+
+    .dial {
+      width: min(82vw, 52vh, 380px);
+      aspect-ratio: 1;
+    }
+
+    .dial svg {
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+
+    .dial text {
+      fill: var(--ink);
+      font-size: 15px;
+      font-weight: 700;
+      text-anchor: middle;
+      dominant-baseline: central;
+    }
+
+    .dial text.north {
+      fill: var(--needle);
+      font-size: 18px;
+    }
+
+    .dial line {
+      stroke: var(--line);
+      stroke-width: 1.5;
+    }
+
+    .dial line.major {
+      stroke: var(--ink);
+      stroke-width: 2;
+    }
+
+    .dial circle {
+      fill: none;
+      stroke: var(--ink);
+      stroke-width: 2;
+    }
+
+    .dial .marker {
+      fill: var(--needle);
+    }
+
+    #deg {
+      font-size: clamp(3rem, 16vw, 5rem);
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+    }
+
+    #card {
+      font-size: 1.4rem;
+      font-weight: 600;
+      min-height: 1.6rem;
+    }
+
+    #src {
+      margin: 0;
+      font-size: 1.05rem;
+    }
+
+    #status {
+      margin: 0;
+      font-size: 0.9rem;
+      color: var(--muted);
+      max-width: 32ch;
+    }
+
+    #warn {
+      margin: 0;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--needle);
+      min-height: 1.2rem;
+    }
+
+    button {
+      font: inherit;
+      font-weight: 700;
+      padding: 0.8rem 2.4rem;
+      border-radius: 0.5rem;
+      border: 2px solid var(--ink);
+      background: var(--ink);
+      color: var(--paper);
+    }
+
+    button:focus-visible {
+      outline: 3px solid var(--needle);
+      outline-offset: 3px;
+    }
+
+    [hidden] {
+      display: none;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="dial">
+    <svg viewBox="-110 -110 220 220" role="img" aria-label="Compass dial">
+      <g id="ring">
+        <circle r="96" />
+      </g>
+      <path class="marker" d="M0 -108 L8 -94 L-8 -94 Z" />
+    </svg>
+  </div>
+  <div id="deg">--</div>
+  <div id="card"></div>
+  <p id="src"></p>
+  <p id="warn"></p>
+  <p id="status">Tap Start. Allow location when asked.</p>
+  <button id="start">Start</button>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const norm = (d) => ((d % 360) + 360) % 360;
+    const diff = (a, b) => ((a - b + 540) % 360) - 180;   // signed shortest angle a - b
+    const RAD = Math.PI / 180;
+
+    /* ---------- Dial artwork ---------- */
+    (function buildDial() {
+      const ring = $("ring"), NS = "http://www.w3.org/2000/svg";
+      const names = { 0: "N", 90: "E", 180: "S", 270: "W" };
+      for (let a = 0; a < 360; a += 15) {
+        if (a in names) {
+          const t = document.createElementNS(NS, "text");
+          t.setAttribute("transform", `rotate(${a}) translate(0 -76)`);
+          if (a === 0) t.setAttribute("class", "north");
+          t.textContent = names[a];
+          ring.appendChild(t);
+        } else {
+          const l = document.createElementNS(NS, "line");
+          const major = a % 45 === 0;
+          l.setAttribute("y1", -96);
+          l.setAttribute("y2", major ? -84 : -90);
+          l.setAttribute("transform", `rotate(${a})`);
+          if (major) l.setAttribute("class", "major");
+          ring.appendChild(l);
+        }
+      }
+    })();
+
+    /* ---------- State ---------- */
+    let declination = null;       // degrees, east positive
+    let declSource = "none";      // "NOAA" | "saved" | "estimate"
+    let compass = null;           // smoothed true-north heading from the phone's sensors
+    let gps = { heading: null, speed: 0, t: 0 };
+    let jitter = [];              // recent |raw - smoothed| for the "unsteady" warning
+    let sawAbsolute = false;
+    let lastSensor = 0;
+    let declTried = false;
+
+    const GPS_MIN_SPEED = 2;      // m/s (about 4.5 mph): above this, trust GPS direction
+    const DECL_FALLBACK = 4;      // rough Oklahoma value, only used if no lookup was ever possible
+
+    /* ---------- Declination (NOAA when online, saved copy when offline) ---------- */
+    const CACHE_KEY = "declination-v1";
+
+    function distKm(lat1, lon1, lat2, lon2) {
+      const dLat = (lat2 - lat1) * RAD, dLon = (lon2 - lon1) * RAD;
+      const a = Math.sin(dLat / 2) ** 2 +
+        Math.cos(lat1 * RAD) * Math.cos(lat2 * RAD) * Math.sin(dLon / 2) ** 2;
+      return 6371 * 2 * Math.asin(Math.sqrt(a));
+    }
+
+    async function loadDeclination(lat, lon) {
+      let cached = null;
+      try { cached = JSON.parse(localStorage.getItem(CACHE_KEY)); } catch (e) { }
+      if (cached) { declination = cached.decl; declSource = "saved"; }
+
+      const fresh = cached &&
+        distKm(lat, lon, cached.lat, cached.lon) < 50 &&
+        Date.now() - cached.t < 30 * 864e5;
+      if (fresh) return;
+
+      try {
+        const url = `https://www.ngdc.noaa.gov/geomag-web/calculators/calculateDeclination` +
+          `?lat1=${lat}&lon1=${lon}&key=zNEw7&resultFormat=json`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const data = await res.json();
+        const d = data.result[0].declination;
+        if (typeof d !== "number") throw new Error("Unexpected response");
+        declination = d; declSource = "NOAA";
+        try { localStorage.setItem(CACHE_KEY, JSON.stringify({ decl: d, lat, lon, t: Date.now() })); } catch (e) { }
+      } catch (e) {
+        console.error("Declination lookup failed:", e);
+        if (!cached) { declination = DECL_FALLBACK; declSource = "estimate"; }
+      }
+    }
+
+    /* ---------- Compass with tilt correction ----------
+       Builds the phone's orientation from alpha/beta/gamma, then takes the
+       horizontal direction of either the top edge (phone flat) or the back
+       (phone upright), whichever is more horizontal. Both agree at any tilt
+       between, so there is no jump when you raise the phone. */
+    function magneticHeading(alpha, beta, gamma) {
+      const cA = Math.cos(alpha * RAD), sA = Math.sin(alpha * RAD);
+      const cB = Math.cos(beta * RAD), sB = Math.sin(beta * RAD);
+      const cG = Math.cos(gamma * RAD), sG = Math.sin(gamma * RAD);
+
+      const tx = -sA * cB, ty = cA * cB;                  // top edge (east, north)
+      const bx = -(cA * sG + sA * sB * cG), by = -(sA * sG - cA * sB * cG); // back of phone
+
+      const useTop = Math.hypot(tx, ty) >= Math.hypot(bx, by);
+      const x = useTop ? tx : bx, y = useTop ? ty : by;
+      return norm(Math.atan2(x, y) / RAD);
+    }
+
+    function onSensor(alpha, beta, gamma) {
+      lastSensor = performance.now();
+      const raw = norm(magneticHeading(alpha, beta, gamma) + (declination ?? 0));
+      compass = compass === null ? raw : norm(compass + diff(raw, compass) * 0.12);
+      jitter.push(Math.abs(diff(raw, compass)));
+      if (jitter.length > 40) jitter.shift();
+      render();
+    }
+
+    /* ---------- Display ---------- */
+    const POINTS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+
+    function render() {
+      const gpsGood = Number.isFinite(gps.heading) && gps.speed >= GPS_MIN_SPEED &&
+        performance.now() - gps.t < 4000;
+      let h = null, src = "";
+      if (gpsGood) { h = gps.heading; src = "Source: GPS direction of travel"; }
+      else if (compass !== null) { h = compass; src = "Source: compass"; }
+
+      if (h !== null) {
+        $("deg").textContent = Math.round(h) % 360 + "°";
+        $("card").textContent = POINTS[Math.round(h / 45) % 8];
+        $("ring").setAttribute("transform", `rotate(${-h})`);
+        $("src").textContent = src;
+      }
+
+      const avg = jitter.length ? jitter.reduce((a, b) => a + b, 0) / jitter.length : 0;
+      $("warn").textContent = (!gpsGood && avg > 6) ? "Compass unsteady (interference nearby)" : "";
+
+      if (declination !== null) {
+        const sign = declination >= 0 ? "+" : "";
+        const label = { NOAA: "NOAA", saved: "saved from last lookup", estimate: "rough estimate, no lookup yet" }[declSource];
+        $("status").textContent = `Declination ${sign}${declination.toFixed(1)}° (${label})`;
+      }
+    }
+
+    /* ---------- Start ---------- */
+    $("start").addEventListener("click", async () => {
+      $("start").hidden = true;
+      $("status").textContent = "Starting sensors…";
+
+      try {
+        if (typeof DeviceOrientationEvent !== "undefined" &&
+          typeof DeviceOrientationEvent.requestPermission === "function") {
+          await DeviceOrientationEvent.requestPermission();
+        }
+      } catch (e) { }
+
+      // Chrome/Brave: absolute (magnetic) orientation
+      window.addEventListener("deviceorientationabsolute", (e) => {
+        if (e.alpha == null) return;
+        sawAbsolute = true;
+        onSensor(e.alpha, e.beta, e.gamma);
+      }, true);
+
+      // Firefox: its plain deviceorientation is absolute and says so
+      window.addEventListener("deviceorientation", (e) => {
+        if (sawAbsolute || !e.absolute || e.alpha == null) return;
+        onSensor(e.alpha, e.beta, e.gamma);
+      }, true);
+
+      setTimeout(() => {
+        if (!lastSensor) $("status").textContent = "No compass data from this browser. GPS direction will still work while moving.";
+      }, 2500);
+
+      if (!navigator.geolocation) { $("status").textContent = "Location not supported."; return; }
+      navigator.geolocation.watchPosition((pos) => {
+        const c = pos.coords;
+        gps = { heading: c.heading, speed: c.speed ?? 0, t: performance.now() };
+        if (!declTried) {
+          declTried = true;
+          loadDeclination(c.latitude, c.longitude).then(render);
+        }
+        render();
+      }, (err) => {
+        $("status").textContent = "Location error: " + err.message;
+      }, { enableHighAccuracy: true, maximumAge: 1000 });
+
+      try { await navigator.wakeLock?.request("screen"); } catch (e) { }
+    });
+  </script>
+</body>
+
+</html>
