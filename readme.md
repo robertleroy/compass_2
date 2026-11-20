@@ -2,7 +2,7 @@
 
 <br>
 
-Compass codeing project.  
+Compass coding project.  
 targets android phone. ios may have different sensor api
 
 <br>
