@@ -201,7 +201,7 @@
     let lastSensor = 0;
     let declTried = false;
 
-    const GPS_MIN_SPEED = 2;      // m/s (about 4.5 mph): above this, trust GPS direction
+    const GPS_MIN_SPEED = 2;      // m/s (meters/second - about 4.5 mph): above this, trust GPS direction
     const DECL_FALLBACK = 4;      // rough Oklahoma value, only used if no lookup was ever possible
 
     /* ---------- Declination (NOAA when online, saved copy when offline) ---------- */
@@ -276,6 +276,7 @@
       let h = null, src = "";
       if (gpsGood) { h = gps.heading; src = "Source: GPS direction of travel"; }
       else if (compass !== null) { h = compass; src = "Source: compass"; }
+      src += ` · ${(gps.speed * 2.237).toFixed(1)} mph`;
 
       if (h !== null) {
         $("deg").textContent = Math.round(h) % 360 + "°";
