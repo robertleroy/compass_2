@@ -59,7 +59,7 @@
       width: 100%;
       height: 100%;
       overflow: visible;
-      transition: 30;
+      transition: 30ms;
     }
 
     .dial text {
@@ -68,37 +68,37 @@
       font-weight: 700;
       text-anchor: middle;
       dominant-baseline: central;
-      transition: 30;
+      transition: 30ms;
     }
 
     .dial text.north {
       fill: var(--needle);
       font-size: 18px;
-      transition: 30;
+      transition: 30ms;
     }
 
     .dial line {
       stroke: var(--line);
       stroke-width: 1.5;
-      transition: 30;
+      transition: 30ms;
     }
 
     .dial line.major {
       stroke: var(--ink);
       stroke-width: 2;
-      transition: 30;
+      transition: 30ms;
     }
 
     .dial circle {
       fill: none;
       stroke: var(--ink);
       stroke-width: 2;
-      transition: 30;
+      transition: 30ms;
     }
 
     .dial .marker {
       fill: var(--needle);
-      transition: 30;
+      transition: 30ms;
     }
 
     #deg {
@@ -285,13 +285,16 @@
       let h = null, src = "";
       if (gpsGood) { h = gps.heading; src = "Source: GPS direction of travel"; }
       else if (compass !== null) { h = compass; src = "Source: compass"; }
-      src += ` · ${(gps.speed * 2.237).toFixed(1)} mph`;
+      // src += ` · ${(gps.speed * 2.237).toFixed(1)} mph`;
+       $("deg").textContent = `${(gps.speed * 2.237).toFixed(1)} mph`;
 
       if (h !== null) {
-        $("deg").textContent = Math.round(h) % 360 + "°";
+        // $("deg").textContent = Math.round(h) % 360 + "°";
+        // **********************************************
+        src += Math.round(h) % 360 + "°";
         $("card").textContent = POINTS[Math.round(h / 45) % 8];
         $("ring").setAttribute("transform", `rotate(${-h})`);
-        $("status").textContent = src;
+        $("src").textContent = src;
       }
 
       const avg = jitter.length ? jitter.reduce((a, b) => a + b, 0) / jitter.length : 0;
@@ -300,7 +303,7 @@
       if (declination !== null) {
         const sign = declination >= 0 ? "+" : "";
         const label = { NOAA: "NOAA", saved: "saved from last lookup", estimate: "rough estimate, no lookup yet" }[declSource];
-        $("src").textContent = `Declination ${sign}${declination.toFixed(1)}° (${label})`;
+        $("status").textContent = `Declination ${sign}${declination.toFixed(1)}° (${label})`;
       }
     }
 
