@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" aria-label="Compass dial" viewBox="-110 -110 220 220">
+  <circle r="96"/>
+  <text class="north" transform="translate(0 -76)">N</text>
+  <path d="m24.847-92.729-1.553 5.796M48-83.138l-3 5.196"/>
+  <path d="m83.138-48-5.196 3M92.729-24.847l-5.796 1.553"/>
+  <text transform="rotate(90 38 38)">E</text>
+  <path d="m92.729 24.847-5.796-1.553M83.138 48l-5.196-3"/>
+  <path d="m48 83.138-3-5.196M24.847 92.729l-1.553-5.796"/>
+  <text transform="matrix(-1 0 0 -1 0 76)">S</text>
+  <path d="m-24.847 92.729 1.553-5.796M-48 83.138l3-5.196"/>
+  <path d="m-83.138 48 5.196-3M-92.729 24.847l5.796-1.553"/>
+  <text transform="rotate(-90 -38 38)">W</text>
+  <path d="m-92.729-24.847 5.796 1.553M-83.138-48l5.196 3"/>
+  <path d="m-48-83.138 3 5.196M-24.847-92.729l1.553 5.796"/>
+  <path d="m0-108 8 14H-8Z" class="marker"/>
+</svg>
