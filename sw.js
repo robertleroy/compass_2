@@ -1,5 +1,5 @@
 // Bump the version number if you ever want to force a full refresh.
-const CACHE = "compass-v1";
+const CACHE = "compass-v2";
 const FILES = ["./", "index.html", "manifest.webmanifest", "192.png", "512.png"];
 
 self.addEventListener("install", (e) => {
